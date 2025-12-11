@@ -1,135 +1,117 @@
 // lib/municipalityService.ts
-// This file pretends to fetch data from a database.
-// For now, it just returns a hard-coded example town.
+import { supabase } from './supabaseClient';
 
-export type MunicipalityMetrics = {
-  municipality_id: string;
-  name: string;
-  county: string;
-  latest_budget_year: number | null;
-  latest_total_budget: number | null;
-  total_corruption_lost: number;
-  total_corruption_recovered: number;
-  estimated_jobs_lost: number;
-};
-
-export type BudgetRecord = {
+export type BudgetYear = {
   year: number;
   total_budget: number;
-  general_government: number | null;
-  public_safety: number | null;
-  public_works: number | null;
-  education: number | null;
-  health_human_services: number | null;
-  other_spending: number | null;
 };
 
-export type CorruptionCase = {
-  id: string;
-  title: string;
-  description: string | null;
-  source_url: string | null;
-  amount_lost: number;
-  amount_recovered: number | null;
-  incident_date: string | null;
-  case_type: string | null;
+export type MunicipalityDashboardData = {
+  slug: string;
+  name: string;
+  county: string | null;
+  latestBudgetYear: number | null;
+  latestBudget: number | null;
+  budgets: BudgetYear[];
+  totalCorruptionLost: number;
+  totalCorruptionRecovered: number;
+  estimatedJobsLost: number;
+  transparencyScoreYear: number | null;
+  transparencyFinalScore: number | null;
 };
 
-export type MunicipalityData = {
-  metrics: MunicipalityMetrics | null;
-  budgets: BudgetRecord[];
-  corruptionCases: CorruptionCase[];
-};
+const JOB_COST_CONSTANT = 120000; // should match your SQL view assumption
 
-// This is our fake "database" for now.
-const EXAMPLE_MUNICIPALITY_ID = 'demo-town';
+export async function getMunicipalityDashboardData(
+  slug: string
+): Promise<MunicipalityDashboardData | null> {
+  // 1. Look up the municipality by slug
+  const { data: muni, error: muniError } = await supabase
+    .from('municipalities')
+    .select('id, slug, name, county')
+    .eq('slug', slug)
+    .maybeSingle();
 
-const exampleMunicipalityData: MunicipalityData = {
-  metrics: {
-    municipality_id: EXAMPLE_MUNICIPALITY_ID,
-    name: 'Example Township',
-    county: 'Sample County',
-    latest_budget_year: 2024,
-    latest_total_budget: 25000000,
-    total_corruption_lost: 1200000,
-    total_corruption_recovered: 300000,
-    estimated_jobs_lost: 15, // pretend this is based on a formula
-  },
-  budgets: [
-    {
-      year: 2022,
-      total_budget: 22000000,
-      general_government: 4000000,
-      public_safety: 6000000,
-      public_works: 3000000,
-      education: 7000000,
-      health_human_services: 800000,
-      other_spending: 2000000,
-    },
-    {
-      year: 2023,
-      total_budget: 23500000,
-      general_government: 4200000,
-      public_safety: 6200000,
-      public_works: 3200000,
-      education: 7200000,
-      health_human_services: 900000,
-      other_spending: 2100000,
-    },
-    {
-      year: 2024,
-      total_budget: 25000000,
-      general_government: 4500000,
-      public_safety: 6500000,
-      public_works: 3500000,
-      education: 7500000,
-      health_human_services: 1000000,
-      other_spending: 2300000,
-    },
-  ],
-  corruptionCases: [
-    {
-      id: 'case-1',
-      title: 'Bid-rigging in public works contract',
-      description:
-        'A series of contracts were steered to a favored vendor in exchange for kickbacks.',
-      source_url: 'https://example.com/comptroller-report',
-      amount_lost: 800000,
-      amount_recovered: 200000,
-      incident_date: '2021-06-15',
-      case_type: 'Bid-rigging',
-    },
-    {
-      id: 'case-2',
-      title: 'Fraudulent overtime claims',
-      description:
-        'Certain employees claimed overtime for hours never worked, costing the town hundreds of thousands.',
-      source_url: 'https://example.com/overtime-fraud',
-      amount_lost: 400000,
-      amount_recovered: 100000,
-      incident_date: '2019-09-10',
-      case_type: 'Fraud',
-    },
-  ],
-};
-
-// This is the function our API will call.
-export async function getMunicipalityData(
-  municipalityId: string
-): Promise<MunicipalityData> {
-  // Normally we'd query Supabase here.
-  // For now, we just return the example data if the ID matches.
-  if (municipalityId === EXAMPLE_MUNICIPALITY_ID) {
-    return exampleMunicipalityData;
+  if (muniError) {
+    console.error('Error fetching municipality:', muniError.message);
+    return null;
   }
 
-  // If the ID doesn't match, we return "no data"
+  if (!muni) {
+    // No such municipality in the DB
+    return null;
+  }
+
+  const municipalityId = muni.id as string;
+
+  // 2. Get all budgets for this municipality, ordered by year
+  const { data: budgetRows, error: budgetError } = await supabase
+    .from('municipal_budgets')
+    .select('year, total_budget')
+    .eq('municipality_id', municipalityId)
+    .order('year', { ascending: true });
+
+  if (budgetError) {
+    console.error('Error fetching budgets:', budgetError.message);
+  }
+
+  const budgets: BudgetYear[] =
+    budgetRows?.map((row) => ({
+      year: row.year as number,
+      total_budget: Number(row.total_budget || 0),
+    })) || [];
+
+  const latestBudget =
+    budgets.length > 0 ? budgets[budgets.length - 1] : null;
+
+  // 3. Corruption metrics from the view (total lost, recovered, jobs lost)
+  const { data: metricsRow, error: metricsError } = await supabase
+    .from('municipality_metrics_simple')
+    .select('total_corruption_lost, total_corruption_recovered, estimated_jobs_lost')
+    .eq('municipality_id', municipalityId)
+    .maybeSingle();
+
+  if (metricsError) {
+    console.error('Error fetching corruption metrics:', metricsError.message);
+  }
+
+  const totalCorruptionLost = metricsRow
+    ? Number(metricsRow.total_corruption_lost || 0)
+    : 0;
+  const totalCorruptionRecovered = metricsRow
+    ? Number(metricsRow.total_corruption_recovered || 0)
+    : 0;
+  const estimatedJobsLost = metricsRow
+    ? Number(metricsRow.estimated_jobs_lost || 0)
+    : Number((totalCorruptionLost / JOB_COST_CONSTANT).toFixed(1));
+
+  // 4. Latest transparency score (your 1–100 grade)
+  const { data: scoreRows, error: scoreError } = await supabase
+    .from('municipal_transparency_scores')
+    .select('score_year, final_score')
+    .eq('municipality_id', municipalityId)
+    .order('score_year', { ascending: false })
+    .limit(1);
+
+  if (scoreError) {
+    console.error('Error fetching transparency scores:', scoreError.message);
+  }
+
+  const latestScore = scoreRows && scoreRows.length > 0 ? scoreRows[0] : null;
+
   return {
-    metrics: null,
-    budgets: [],
-    corruptionCases: [],
+    slug: muni.slug as string,
+    name: muni.name as string,
+    county: (muni.county as string) || null,
+    latestBudgetYear: latestBudget ? latestBudget.year : null,
+    latestBudget: latestBudget ? latestBudget.total_budget : null,
+    budgets,
+    totalCorruptionLost,
+    totalCorruptionRecovered,
+    estimatedJobsLost,
+    transparencyScoreYear: latestScore ? (latestScore.score_year as number) : null,
+    transparencyFinalScore: latestScore
+      ? Number(latestScore.final_score || 0)
+      : null,
   };
 }
-
-// Export the example ID so the frontend knows what to request.
-export { EXAMPLE_MUNICIPALITY_ID };
