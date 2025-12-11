@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient';
 export type BudgetYear = {
   year: number;
   total_budget: number;
+  source_url: string | null;
 };
 
 export type MunicipalityDashboardData = {
@@ -12,6 +13,7 @@ export type MunicipalityDashboardData = {
   county: string | null;
   latestBudgetYear: number | null;
   latestBudget: number | null;
+  latestBudgetSourceUrl: string | null;
   budgets: BudgetYear[];
   totalCorruptionLost: number;
   totalCorruptionRecovered: number;
@@ -20,7 +22,7 @@ export type MunicipalityDashboardData = {
   transparencyFinalScore: number | null;
 };
 
-const JOB_COST_CONSTANT = 120000; // should match your SQL view assumption
+const JOB_COST_CONSTANT = 120000; // $120k per job (salary + benefits + training)
 
 export async function getMunicipalityDashboardData(
   slug: string
@@ -47,7 +49,7 @@ export async function getMunicipalityDashboardData(
   // 2. Get all budgets for this municipality, ordered by year
   const { data: budgetRows, error: budgetError } = await supabase
     .from('municipal_budgets')
-    .select('year, total_budget')
+    .select('year, total_budget, source_url')
     .eq('municipality_id', municipalityId)
     .order('year', { ascending: true });
 
@@ -58,11 +60,11 @@ export async function getMunicipalityDashboardData(
   const budgets: BudgetYear[] =
     budgetRows?.map((row) => ({
       year: row.year as number,
-      total_budget: Number(row.total_budget || 0),
+      total_budget: row.total_budget ? Number(row.total_budget) : 0,
+      source_url: (row as any).source_url ?? null,
     })) || [];
 
-  const latestBudget =
-    budgets.length > 0 ? budgets[budgets.length - 1] : null;
+  const latestBudget = budgets.length > 0 ? budgets[budgets.length - 1] : null;
 
   // 3. Corruption metrics from the view (total lost, recovered, jobs lost)
   const { data: metricsRow, error: metricsError } = await supabase
@@ -85,7 +87,7 @@ export async function getMunicipalityDashboardData(
     ? Number(metricsRow.estimated_jobs_lost || 0)
     : Number((totalCorruptionLost / JOB_COST_CONSTANT).toFixed(1));
 
-  // 4. Latest transparency score (your 1–100 grade)
+  // 4. Latest transparency score (your 1–100 grade, if present)
   const { data: scoreRows, error: scoreError } = await supabase
     .from('municipal_transparency_scores')
     .select('score_year, final_score')
@@ -99,12 +101,21 @@ export async function getMunicipalityDashboardData(
 
   const latestScore = scoreRows && scoreRows.length > 0 ? scoreRows[0] : null;
 
+  console.log('CLEAR DEBUG – municipality dashboard data', {
+    slug,
+    muni,
+    budgets,
+    metricsRow,
+    latestScore,
+  });
+
   return {
     slug: muni.slug as string,
     name: muni.name as string,
     county: (muni.county as string) || null,
     latestBudgetYear: latestBudget ? latestBudget.year : null,
     latestBudget: latestBudget ? latestBudget.total_budget : null,
+    latestBudgetSourceUrl: latestBudget ? latestBudget.source_url : null,
     budgets,
     totalCorruptionLost,
     totalCorruptionRecovered,
