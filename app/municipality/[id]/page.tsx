@@ -1,158 +1,99 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { getMunicipalityDashboardData, MunicipalityDashboardData } from '@/lib/municipalityService';
 import {
-  MunicipalityDashboardData,
-  getMunicipalityDashboardData,
-} from '../../../lib/municipalityService';
-
-// Recharts imports for the simple budget chart
-import {
-  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid,
+  ResponsiveContainer,
 } from 'recharts';
-
-// Helper to get the last part of the URL as the slug
-function extractSlugFromPath(pathname: string | null): string | null {
-  if (!pathname) return null;
-  const parts = pathname.split('/').filter(Boolean);
-  if (parts.length === 0) return null;
-  return parts[parts.length - 1]; // e.g. 'newark'
-}
 
 export default function MunicipalityPage() {
   const pathname = usePathname();
-  const slug = extractSlugFromPath(pathname);
+
+  // Last segment of /municipality/newark => "newark"
+  const rawId = pathname?.split('/').filter(Boolean).pop() || '';
+  const slug = rawId.toLowerCase();
 
   const [data, setData] = useState<MunicipalityDashboardData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!slug) {
+    async function load() {
+      setLoading(true);
+      const result = await getMunicipalityDashboardData(slug);
+      setData(result);
       setLoading(false);
-      setError('No town ID provided in URL.');
-      return;
     }
-
-    setLoading(true);
-    setError(null);
-
-    getMunicipalityDashboardData(slug)
-      .then((result) => {
-        if (!result) {
-          setData(null);
-        } else {
-          setData(result);
-        }
-      })
-      .catch((err) => {
-        console.error('Error loading municipality dashboard:', err);
-        setError('Failed to load data for this town.');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    if (slug) {
+      load();
+    }
   }, [slug]);
 
-  if (!slug) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <div className="max-w-xl text-center px-4">
-          <h1 className="text-2xl font-bold mb-2">CLEAR Budget & Corruption Dashboard</h1>
-          <p className="text-slate-300">
-            No town ID found in the URL. Try visiting this page from the CLEAR map or use a URL like
-            <code className="ml-1 px-1 py-0.5 bg-slate-800 rounded text-xs">
-              /municipality/newark
-            </code>
-            .
-          </p>
-        </div>
-      </main>
-    );
-  }
+  // Nicely formatted town name if we have no DB data
+  const prettyName = slug
+    ? slug
+        .split('-')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ')
+    : 'New Jersey Municipality';
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <p className="text-slate-300">Loading CLEAR data for this town…</p>
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-slate-600 text-sm">Loading CLEAR dashboard…</p>
       </main>
     );
   }
 
-  if (error) {
+  // If no data in Supabase, show friendly placeholder
+  if (!data) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <div className="max-w-lg text-center px-4">
-          <h1 className="text-xl font-semibold mb-2">
-            CLEAR Budget & Corruption Dashboard
+      <main className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-3xl w-full bg-white shadow-md rounded-lg border border-slate-200 p-6">
+          <h1 className="text-xs font-semibold tracking-[0.2em] uppercase text-slate-500 mb-2">
+            CLEAR Budget &amp; Corruption Dashboard
           </h1>
-          <p className="text-red-300 mb-2">{error}</p>
-          <p className="text-slate-400 text-sm">
-            If this keeps happening, CLEAR may not have data for this municipality yet.
+          <h2 className="text-2xl font-bold text-slate-900 mb-1">
+            {prettyName}
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            New Jersey Municipality
+          </p>
+
+          <p className="text-base text-slate-700 font-medium">
+            Data coming soon for this town.
+          </p>
+          <p className="text-sm text-slate-500 mt-3">
+            CLEAR will ingest:
+          </p>
+          <ul className="list-disc list-inside text-sm text-slate-500 mt-1 space-y-1">
+            <li>Budget documents and financial statements</li>
+            <li>State and local corruption audits and enforcement actions</li>
+            <li>
+              A public formula converting wasted dollars into local jobs not
+              created
+            </li>
+          </ul>
+          <p className="text-xs text-slate-400 mt-4">
+            For now, this page is a placeholder so your town&apos;s link from the
+            CLEAR Gradebook map doesn&apos;t go to a dead end.
           </p>
         </div>
       </main>
     );
   }
 
-  // No data in DB for this slug
-  if (!data) {
-    const prettyName = slug
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
-
-    return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <div className="max-w-xl w-full px-4 py-10">
-          <h1 className="text-2xl font-bold mb-4">
-            CLEAR Budget & Corruption Dashboard
-          </h1>
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-4">
-            <div>
-              <h2 className="text-xl font-semibold">{prettyName}</h2>
-              <p className="text-sm text-slate-400 mt-1">New Jersey Municipality</p>
-            </div>
-
-            <div className="bg-slate-950 border border-dashed border-slate-700 rounded-md p-4">
-              <p className="text-slate-200 font-medium">
-                Data coming soon for this town.
-              </p>
-              <p className="text-slate-400 text-sm mt-2">
-                CLEAR will ingest:
-              </p>
-              <ul className="list-disc list-inside text-slate-400 text-sm mt-1 space-y-1">
-                <li>Budget documents and financial statements</li>
-                <li>State and local corruption audits and enforcement actions</li>
-                <li>
-                  A public formula converting wasted dollars into local jobs not created
-                </li>
-              </ul>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              For now, this page is a placeholder so your town&apos;s link from the CLEAR
-              Gradebook map doesn&apos;t go to a dead end.
-            </p>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // If we reach here, we have real data
   const {
     name,
     county,
     latestBudgetYear,
     latestBudget,
+    latestBudgetSourceUrl,
     budgets,
     totalCorruptionLost,
     totalCorruptionRecovered,
@@ -163,128 +104,159 @@ export default function MunicipalityPage() {
 
   const budgetChartData = budgets.map((b) => ({
     year: b.year,
-    budgetMillions: Math.round((b.total_budget / 1_000_000) * 10) / 10, // one decimal
+    total: b.total_budget ? Math.round(b.total_budget / 1_000_000) : 0,
   }));
 
+  const corruptionMillions = totalCorruptionLost
+    ? (totalCorruptionLost / 1_000_000).toFixed(1)
+    : '0.0';
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-      <div className="max-w-4xl w-full px-4 py-10">
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold mb-1">
-            CLEAR Budget & Corruption Dashboard
+    <main className="min-h-screen flex justify-center px-4 py-10">
+      <div className="w-full max-w-5xl bg-white shadow-md rounded-lg border border-slate-200 p-6 md:p-8">
+        {/* Header */}
+        <header className="mb-6 border-b border-slate-200 pb-4">
+          <p className="text-xs font-semibold tracking-[0.2em] uppercase text-slate-500 mb-2">
+            CLEAR Budget &amp; Corruption Dashboard
+          </p>
+          <h1 className="text-3xl font-bold text-slate-900">
+            {name || prettyName}
           </h1>
-          <p className="text-sm text-slate-400">
-            Town ID from URL:{' '}
-            <span className="font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">
-              {slug}
-            </span>
+          <p className="text-sm text-slate-500 mt-1">
+            {county ? `${county} County, New Jersey` : 'New Jersey Municipality'}
+          </p>
+          <p className="text-xs text-slate-400 mt-2">
+            Prototype view – data for a handful of towns is pre-loaded to
+            demonstrate how CLEAR will work statewide.
           </p>
         </header>
 
-        <section className="bg-slate-900 border border-slate-700 rounded-lg p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold">{name}</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                {county ? `${county} County` : 'New Jersey municipality'}
-              </p>
-            </div>
-            {transparencyFinalScore !== null && (
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-slate-400">
-                  CLEAR Transparency & Ethics Grade
-                </p>
-                <p className="text-3xl font-bold mt-1">
-                  {Math.round(transparencyFinalScore)}
-                  <span className="text-base font-medium text-slate-400 ml-1">
-                    / 100
-                  </span>
-                </p>
-                {transparencyScoreYear && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    Based on {transparencyScoreYear} review using CLEAR’s 7-indicator formula.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
+        {/* Top metric strip */}
         <section className="grid md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-400">
+          {/* Transparency grade */}
+          <div className="border border-slate-200 rounded-md p-4">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+              CLEAR Transparency &amp; Ethics Grade
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              {transparencyScoreYear
+                ? `Preliminary score for ${transparencyScoreYear}`
+                : 'Preliminary score'}
+            </p>
+            <p className="text-3xl font-bold mt-2 text-slate-900">
+              {transparencyFinalScore !== null ? transparencyFinalScore : '–'}
+              <span className="text-sm font-normal text-slate-500 ml-1">
+                / 100
+              </span>
+            </p>
+            <p className="text-xs text-slate-400 mt-2">
+              Based on OPRA responsiveness, ethics structures, conflicts
+              disclosures, contract transparency, and citizen input
+              (CLEAR formula in development).
+            </p>
+          </div>
+
+          {/* Latest budget */}
+          <div className="border border-slate-200 rounded-md p-4">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
               Latest adopted budget
             </p>
             <p className="text-sm text-slate-500 mt-1">
               {latestBudgetYear ? `FY${latestBudgetYear}` : 'No year in database'}
             </p>
-            <p className="text-2xl font-bold mt-2">
-              {latestBudget !== null
-                ? `$${(latestBudget / 1_000_000).toFixed(1)}M`
-                : '$0'}
+            <p className="text-2xl font-bold mt-2 text-slate-900">
+              {latestBudget === null
+                ? '$0'
+                : latestBudget === 0 && latestBudgetSourceUrl
+                ? 'Budget not yet parsed'
+                : `$${(latestBudget / 1_000_000).toFixed(1)}M`}
             </p>
+            {latestBudgetSourceUrl && (
+              <a
+                href={latestBudgetSourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-sky-600 underline mt-2 inline-block"
+              >
+                View full adopted budget (PDF)
+              </a>
+            )}
           </div>
 
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-400">
+          {/* Corruption & jobs */}
+          <div className="border border-slate-200 rounded-md p-4">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
               Documented corruption &amp; waste
             </p>
-            <p className="text-sm text-slate-500 mt-1">Since available cases</p>
-            <p className="text-2xl font-bold mt-2">
-              {`$${(totalCorruptionLost / 1_000_000).toFixed(2)}M`}
-            </p>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-400">
-              Estimated jobs not created
-            </p>
             <p className="text-sm text-slate-500 mt-1">
-              Using ~$120k per local job (salary + benefits)
+              Since 2010 (from state and local reports)
             </p>
-            <p className="text-2xl font-bold mt-2">
-              {estimatedJobsLost.toFixed(1)}
+            <p className="text-xl font-bold mt-2 text-slate-900">
+              ${corruptionMillions}M
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Recovered: $
+              {totalCorruptionRecovered
+                ? (totalCorruptionRecovered / 1_000_000).toFixed(1)
+                : '0.0'}
+              M
+            </p>
+            <p className="text-xs text-slate-500">
+              Estimated jobs not created:{' '}
+              <span className="font-semibold">
+                {estimatedJobsLost.toFixed(1)}
+              </span>
+            </p>
+            <p className="text-[11px] text-slate-400 mt-2">
+              Jobs estimate based on $120k per job (salary + benefits +
+              training).
             </p>
           </div>
         </section>
 
-        <section className="bg-slate-900 border border-slate-700 rounded-lg p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-3">
-            Budget trend (total, by year)
-          </h3>
-          {budgetChartData.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              No budget history in the database yet for this town.
+        {/* Budget chart */}
+        <section className="mb-6">
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-base font-semibold text-slate-900">
+              Budget over time
+            </h2>
+            <p className="text-xs text-slate-500">
+              Total municipal budget (millions, by fiscal year)
             </p>
-          ) : (
-            <div className="w-full h-64">
+          </div>
+          {budgetChartData.length > 0 ? (
+            <div className="w-full h-64 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={budgetChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                  <XAxis dataKey="year" stroke="#9ca3af" />
-                  <YAxis
-                    stroke="#9ca3af"
-                    tickFormatter={(value) => `${value}M`}
-                  />
+                  <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip
+                    formatter={(value) => [`${value}M`, 'Total budget']}
+                    labelStyle={{ fontSize: 12 }}
                     contentStyle={{
-                      backgroundColor: '#020617',
-                      borderColor: '#1f2937',
+                      fontSize: 12,
+                      borderRadius: 4,
                     }}
-                    formatter={(value) => [`$${value}M`, 'Total budget']}
                   />
-                  <Bar dataKey="budgetMillions" />
+                  <Bar dataKey="total" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          ) : (
+            <p className="text-sm text-slate-500">
+              No budget history in the database yet.
+            </p>
           )}
         </section>
 
-        <p className="text-xs text-slate-500">
-          CLEAR is in pilot mode. These numbers are illustrative and will be refined as
-          we ingest more official budget documents, audits, and enforcement actions for
-          all 564 New Jersey municipalities.
-        </p>
+        {/* Notes */}
+        <section className="border-t border-slate-200 pt-4 mt-4">
+          <p className="text-xs text-slate-500">
+            CLEAR is in prototype mode. Numbers shown here come from a small set
+            of sample budgets and enforcement actions to demonstrate what a
+            statewide New Jersey transparency portal could look like.
+          </p>
+        </section>
       </div>
     </main>
   );

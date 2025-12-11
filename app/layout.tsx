@@ -1,10 +1,10 @@
 // app/layout.tsx
+import type { Metadata } from 'next';
 
-import './globals.css';
-
-export const metadata = {
-  title: 'CLEAR Dashboard',
-  description: 'Budget & Corruption Transparency for NJ Municipalities',
+export const metadata: Metadata = {
+  title: 'CLEAR Budget & Corruption Dashboard',
+  description:
+    'CLEAR makes New Jersey municipal budgets, corruption impacts, and jobs foregone easy to explore.',
 };
 
 export default function RootLayout({
@@ -15,12 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
+        className="min-h-screen bg-[#f5f5f5] text-slate-900 antialiased"
         style={{
-          margin: 0,
-          padding: 0,
-          backgroundColor: '#f5f5f5',
           fontFamily:
-            'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+            '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
         }}
       >
         {children}
