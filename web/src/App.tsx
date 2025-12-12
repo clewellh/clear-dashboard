@@ -59,13 +59,9 @@ function App() {
 
       const rows = (data ?? []) as MeetingRow[];
 
-      const mapped: EventInput[] = rows.map((m) => ({
-        id: String(
-          m.id ?? `${m.meeting_date}-${m.municipality ?? ''}-${m.body_name ?? ''}`,
-        ),
-        title: `${m.municipality ?? ''}${
-          m.municipality ? ' – ' : ''
-        }${m.body_name ?? ''}${
+      const mapped: EventInput[] = rows.map(m => ({
+        id: String(m.id ?? `${m.meeting_date}-${m.municipality ?? ''}-${m.body_name ?? ''}`),
+        title: `${m.municipality ?? ''}${m.municipality ? ' – ' : ''}${m.body_name ?? ''}${
           m.body_name || m.title ? ': ' : ''
         }${m.title ?? 'Meeting'}`,
         start: m.meeting_date,
@@ -92,13 +88,9 @@ function App() {
         Public meetings calendar for New Jersey (loaded from Supabase).
       </p>
 
-      {loading && (
-        <p style={{ marginTop: '0.5rem' }}>Loading meetings from Supabase…</p>
-      )}
+      {loading && <p style={{ marginTop: '0.5rem' }}>Loading meetings from Supabase…</p>}
       {error && (
-        <p style={{ marginTop: '0.5rem', color: 'red' }}>
-          Error loading meetings: {error}
-        </p>
+        <p style={{ marginTop: '0.5rem', color: 'red' }}>Error loading meetings: {error}</p>
       )}
 
       <div
