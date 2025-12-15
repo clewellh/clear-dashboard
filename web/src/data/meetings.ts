@@ -1,40 +1,58 @@
-// web/src/data/meetings.ts
-
 import { supabase } from '../lib/supabaseClient';
-import type { MeetingRow } from '../types/meeting';
-import type { DataResult } from './result';
 
-type FetchMeetingsArgs = {
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
-  municipality?: string; // exact match on np_meetings.municipality
+export type Meeting = {
+  uid: string;
+  meeting_date: string;
+  municipality: string | null;
+  body_name: string | null;
+  title: string | null;
+  agenda_url: string | null;
 };
 
-/**
- * Fetch meetings in a date range, optionally filtered by municipality.
- * - No React imports
- * - Typed return
- */
+type FetchMeetingsArgs = {
+  startDate: string;
+  endDate: string;
+  municipality?: string;
+  body?: string;
+  keyword?: string;
+};
+
 export async function fetchMeetingsInRange(
   args: FetchMeetingsArgs
-): Promise<DataResult<MeetingRow[]>> {
-  const { startDate, endDate, municipality } = args;
-
-  let q = supabase
+): Promise<{ data: Meeting[] | null; error: string | null }> {
+  let query = supabase
     .from('np_meetings')
-    .select('uid, meeting_date, municipality, body_name, title, agenda_url')
-    .gte('meeting_date', startDate)
-    .lte('meeting_date', endDate)
+    .select(
+      'uid, meeting_date, municipality, body_name, title, agenda_url'
+    )
+    .gte('meeting_date', args.startDate)
+    .lte('meeting_date', args.endDate)
     .order('meeting_date', { ascending: true });
 
-  // Server-side filter (preferred)
-  if (municipality && municipality.trim().length > 0) {
-    q = q.eq('municipality', municipality.trim());
+  // Optional filters (server-side)
+  if (args.municipality) {
+    query = query.eq('municipality', args.municipality);
   }
 
-  const { data, error } = await q;
+  if (args.body) {
+    query = query.ilike('body_name', `%${args.body}%`);
+  }
 
-  if (error) return { data: null, error: error.message ?? 'Unknown Supabase error' };
+  if (args.keyword) {
+    query = query.ilike('title', `%${args.keyword}%`);
+  }
 
-  return { data: (data ?? []) as MeetingRow[], error: null };
+  const { data, error } = await query;
+
+  if (error) {
+    return {
+      data: null,
+      error: error.message,
+    };
+  }
+
+  return {
+    data: (data ?? []) as Meeting[],
+    error: null,
+  };
 }
