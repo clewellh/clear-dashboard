@@ -6,6 +6,9 @@ import AppShell from './layout/AppShell';
 import TownPage from './pages/TownPage';
 import PeoplePage from './pages/PeoplePage';
 import ActPage from './pages/ActPage';
+import CalendarPage from './pages/CalendarPage';
+import MyTownDashboardPage from './pages/MyTownDashboardPage';
+import MyTownStatusPage from './pages/MyTownStatusPage';
 
 import Login from './pages/Login';
 import AdminHome from './pages/AdminHome';
@@ -32,12 +35,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
               {/* Tool 1: My Town */}
               <Route path="/town" element={<TownPage />} />
+              <Route path="/my-town/:slug" element={<MyTownDashboardPage />} />
+              <Route path="/my-town/:slug/calendar" element={<CalendarPage />} />
+              <Route path="/my-town/:slug/status" element={<MyTownStatusPage />} />
 
               {/* Tool 2: My Politicians */}
               <Route path="/people" element={<PeoplePage />} />
 
-              {/* Tool 3: Organize */}
+              {/* Tool 3: Organize / Act */}
+              {/* Back-compat */}
               <Route path="/act" element={<ActPage />} />
+              {/* NEW: town-aware routes */}
+              <Route path="/act/:slug" element={<ActPage />} />
+              <Route path="/organize/:slug" element={<ActPage />} />
             </Route>
 
             {/* Admin-only */}

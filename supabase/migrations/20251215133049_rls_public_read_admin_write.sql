@@ -1,9 +1,8 @@
 -- Day 7: RLS with Public Read + Admin Write
--- Tables: public.municipalities, public.np_meetings, public.app_users
--- Admin UID: b983b947-f5f8-44db-a7cb-de961374efa9
+-- Tables: public.municipalities, public.np_meetings (if exists), public.app_users
+-- NOTE: Do NOT seed a hard-coded admin UUID in migrations.
 
--- 0) Helper function: "is the current user an admin?"
--- SECURITY DEFINER so it can read app_users even when RLS is on.
+-- 0) Helper: is current user an admin?
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -19,24 +18,52 @@ as $$
   );
 $$;
 
--- 1) Seed/Upsert your admin row in app_users
--- Pulls email from auth.users if available.
-insert into public.app_users (id, email, role)
-values (
-  'b983b947-f5f8-44db-a7cb-de961374efa9'::uuid,
-  (select email from auth.users where id = 'b983b947-f5f8-44db-a7cb-de961374efa9'::uuid),
-  'admin'
-)
-on conflict (id) do update
-set role = 'admin',
-    email = excluded.email;
+-- 1) Helper: promote a user to admin by email (run manually after user exists)
+create or replace function public.promote_user_to_admin(target_email text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid;
+begin
+  select id into uid
+  from auth.users
+  where email = target_email;
 
--- 2) Enable RLS
-alter table public.municipalities enable row level security;
-alter table public.np_meetings enable row level security;
-alter table public.app_users enable row level security;
+  if uid is null then
+    raise exception 'No auth user found for email %', target_email;
+  end if;
 
--- 3) Drop existing policies if they exist (so migration is rerunnable in dev)
+  insert into public.app_users (id, email, role)
+  values (uid, target_email, 'admin')
+  on conflict (id) do update
+    set role = 'admin',
+        email = excluded.email;
+end;
+$$;
+
+revoke all on function public.promote_user_to_admin(text) from public;
+grant execute on function public.promote_user_to_admin(text) to service_role;
+
+-- 2) Enable RLS (only on tables that exist)
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='municipalities') then
+    execute 'alter table public.municipalities enable row level security';
+  end if;
+
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='np_meetings') then
+    execute 'alter table public.np_meetings enable row level security';
+  end if;
+
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='app_users') then
+    execute 'alter table public.app_users enable row level security';
+  end if;
+end $$;
+
+-- 3) Drop existing policies if they exist (rerunnable)
 do $$
 begin
   -- municipalities
@@ -64,52 +91,73 @@ begin
   end if;
 end $$;
 
--- 4) POLICIES
+-- 4) Policies (only create them if the table exists)
 
--- municipalities: PUBLIC READ
-create policy municipalities_public_read
-on public.municipalities
-for select
-to anon, authenticated
-using (true);
+-- municipalities
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='municipalities') then
+    execute $p$
+      create policy municipalities_public_read
+      on public.municipalities
+      for select
+      to anon, authenticated
+      using (true)
+    $p$;
 
--- municipalities: ADMIN WRITE (insert/update/delete)
-create policy municipalities_admin_write
-on public.municipalities
-for all
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+    execute $p$
+      create policy municipalities_admin_write
+      on public.municipalities
+      for all
+      to authenticated
+      using (public.is_admin())
+      with check (public.is_admin())
+    $p$;
+  end if;
+end $$;
 
--- np_meetings: PUBLIC READ (calendar stays public)
-create policy np_meetings_public_read
-on public.np_meetings
-for select
-to anon, authenticated
-using (true);
+-- np_meetings
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='np_meetings') then
+    execute $p$
+      create policy np_meetings_public_read
+      on public.np_meetings
+      for select
+      to anon, authenticated
+      using (true)
+    $p$;
 
--- np_meetings: ADMIN WRITE
-create policy np_meetings_admin_write
-on public.np_meetings
-for all
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+    execute $p$
+      create policy np_meetings_admin_write
+      on public.np_meetings
+      for all
+      to authenticated
+      using (public.is_admin())
+      with check (public.is_admin())
+    $p$;
+  end if;
+end $$;
 
--- app_users: user can read their own profile; admins can read all
-create policy app_users_self_read
-on public.app_users
-for select
-to authenticated
-using (
-  id = auth.uid()
-  or public.is_admin()
-);
+-- app_users
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='app_users') then
+    execute $p$
+      create policy app_users_self_read
+      on public.app_users
+      for select
+      to authenticated
+      using (id = auth.uid() or public.is_admin())
+    $p$;
 
--- app_users: admins can insert/update/delete any profile rows
-create policy app_users_admin_all
-on public.app_users
-for all
-to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+    execute $p$
+      create policy app_users_admin_all
+      on public.app_users
+      for all
+      to authenticated
+      using (public.is_admin())
+      with check (public.is_admin())
+    $p$;
+  end if;
+end $$;

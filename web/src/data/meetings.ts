@@ -21,7 +21,7 @@ export async function fetchMeetingsInRange(
   args: FetchMeetingsArgs
 ): Promise<{ data: Meeting[] | null; error: string | null }> {
   let query = supabase
-    .from('np_meetings')
+    .from('meetings')
     .select(
       'uid, meeting_date, municipality, body_name, title, agenda_url'
     )

@@ -1,5 +1,5 @@
 // lib/municipalityService.ts
-import { supabase } from './supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 
 export type BudgetYear = {
   year: number;

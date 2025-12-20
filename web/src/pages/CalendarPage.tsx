@@ -8,6 +8,7 @@ import type { DatesSetArg, EventClickArg, EventInput } from '@fullcalendar/core'
 
 import { fetchMunicipalities } from '../data/municipalities';
 import { fetchMeetingsInRange } from '../data/meetings';
+import { fetchMeetingDocuments, type MeetingDocument } from '../data/meetingDocuments';
 import type { Municipality } from '../types/municipality';
 
 type MeetingModal = {
@@ -16,10 +17,26 @@ type MeetingModal = {
   municipality?: string | null;
   body_name?: string | null;
   agenda_url?: string | null;
+  meeting_uid?: string | null;
 };
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function docLabel(t: MeetingDocument['doc_type']) {
+  switch (t) {
+    case 'agenda':
+      return 'Agenda';
+    case 'minutes':
+      return 'Minutes';
+    case 'packet':
+      return 'Packet';
+    case 'video':
+      return 'Video';
+    default:
+      return 'Document';
+  }
 }
 
 export default function CalendarPage() {
@@ -42,6 +59,11 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [modal, setModal] = useState<MeetingModal | null>(null);
+
+  // Docs shown in modal
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState<string | null>(null);
+  const [docs, setDocs] = useState<MeetingDocument[]>([]);
 
   // Load municipalities once
   useEffect(() => {
@@ -90,6 +112,7 @@ export default function CalendarPage() {
           start: m.meeting_date,
           allDay: true,
           extendedProps: {
+            meeting_uid: m.uid ?? null,
             municipality: m.municipality ?? null,
             body_name: m.body_name ?? null,
             agenda_url: m.agenda_url ?? null,
@@ -105,20 +128,45 @@ export default function CalendarPage() {
     setRange({ start: isoDate(arg.start), end: isoDate(arg.end) });
   }
 
-  function onEventClick(arg: EventClickArg) {
+  async function onEventClick(arg: EventClickArg) {
     const props = arg.event.extendedProps as any;
 
+    // Prevent FullCalendar from navigating away if event has a URL
+    arg.jsEvent.preventDefault();
+
+    const meetingUid: string | null = props?.meeting_uid ?? null;
+
+    // Open modal immediately (fast UX), then load docs
     setModal({
       title: arg.event.title,
       start: arg.event.startStr,
       municipality: props?.municipality ?? null,
       body_name: props?.body_name ?? null,
       agenda_url: props?.agenda_url ?? null,
+      meeting_uid: meetingUid,
     });
 
-    // Prevent FullCalendar from navigating away if event has a URL
-    arg.jsEvent.preventDefault();
+    setDocs([]);
+    setDocsError(null);
+
+    if (!meetingUid) {
+      // No UID -> cannot fetch docs; fallback link will still show
+      return;
+    }
+
+    setDocsLoading(true);
+    const res = await fetchMeetingDocuments(meetingUid);
+    if (res.error) {
+      setDocsError(res.error);
+      setDocsLoading(false);
+      return;
+    }
+    setDocs(res.data ?? []);
+    setDocsLoading(false);
   }
+
+  const fallbackAgendaAlreadyInDocs =
+    modal?.agenda_url && docs.some((d) => d.url === modal.agenda_url);
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' }}>
@@ -190,7 +238,12 @@ export default function CalendarPage() {
       {/* Modal */}
       {modal && (
         <div
-          onClick={() => setModal(null)}
+          onClick={() => {
+            setModal(null);
+            setDocs([]);
+            setDocsError(null);
+            setDocsLoading(false);
+          }}
           style={{
             position: 'fixed',
             inset: 0,
@@ -208,7 +261,7 @@ export default function CalendarPage() {
               background: 'white',
               borderRadius: 12,
               padding: '1rem',
-              width: 'min(640px, 100%)',
+              width: 'min(680px, 100%)',
               boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
               zIndex: 10000,
               pointerEvents: 'auto',
@@ -232,17 +285,47 @@ export default function CalendarPage() {
               ) : null}
             </p>
 
-            {modal.agenda_url ? (
-              <p>
+            <h3 style={{ marginBottom: '0.5rem' }}>Documents</h3>
+
+            {docsLoading && <p>Loading documents…</p>}
+            {docsError && <p style={{ color: 'crimson' }}>{docsError}</p>}
+
+            {!docsLoading && !docsError && docs.length === 0 ? (
+              <p style={{ color: '#777' }}>No documents added yet.</p>
+            ) : null}
+
+            {!docsLoading && !docsError && docs.length > 0 ? (
+              <ul style={{ marginTop: 0 }}>
+                {docs.map((d) => (
+                  <li key={d.id} style={{ marginBottom: '0.25rem' }}>
+                    <a href={d.url} target="_blank" rel="noreferrer">
+                      {docLabel(d.doc_type)}
+                      {d.title ? `: ${d.title}` : ''}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {/* Fallback to old single agenda_url if it isn't already in docs */}
+            {modal.agenda_url && !fallbackAgendaAlreadyInDocs ? (
+              <p style={{ marginTop: '0.5rem' }}>
                 <a href={modal.agenda_url} target="_blank" rel="noreferrer">
                   Open agenda / packet
                 </a>
               </p>
-            ) : (
-              <p style={{ color: '#777' }}>No agenda link available yet.</p>
-            )}
+            ) : null}
 
-            <button onClick={() => setModal(null)}>Close</button>
+            <button
+              onClick={() => {
+                setModal(null);
+                setDocs([]);
+                setDocsError(null);
+                setDocsLoading(false);
+              }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { getMunicipalityDashboardData, MunicipalityDashboardData } from '@/lib/municipalityService';
-import {
+import { getMunicipalityDashboardData, MunicipalityDashboardData } from '@/app/lib/municipalityService';
+
   BarChart,
   Bar,
   XAxis,
